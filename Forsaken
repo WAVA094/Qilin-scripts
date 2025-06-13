@@ -59,6 +59,8 @@ Tab1:AddDiscordInvite({
     Invite = "https://t.me/qlnscrpt",
 })
 
+local Paragraph = Tab1:AddParagraph({"", "Абзац\nВторая строка"})
+
 -- PLAYER TAB
 Tab2:AddSlider({
     Name = "PLAYER SPEED SLIDER",
@@ -101,21 +103,24 @@ Tab2:AddToggle({
     Name = "INF STAMINA",
     Default = false,
     Callback = function(Value)
-        ActiveInfiniteStamina = Value 
+        ActiveInfiniteStamina = Value
         task.spawn(function()
-            while ActiveInfiniteStamina do 
-                if game:GetService("ReplicatedStorage"):FindFirstChild("Modules") then
-                    local network = game:GetService("ReplicatedStorage").Modules.Network
-                    if network and network:FindFirstChild("UnreliableRemoteEvent") then
-                        network.UnreliableRemoteEvent:FireServer("FootstepPlayed", 100)
-                    end
+            while ActiveInfiniteStamina do
+                local Sprinting = game:GetService("ReplicatedStorage").Systems.Character.Game.Sprinting
+                if Sprinting then
+                    local stamina = require(Sprinting)
+                    stamina.MaxStamina = 100
+                    stamina.MinStamina = -20
+                    stamina.StaminaGain = 100
+                    stamina.StaminaLoss = 5
+                    stamina.SprintSpeed = 40
+                    stamina.StaminaLossDisabled = true
                 end
-                task.wait(0.1)
-            end 
+                task.wait(0.5) -- Применять каждые 0.5 секунд
+            end
         end)
     end
 })
-
 Tab2:AddToggle({
     Name = "AUTO KILL SURVIVOR",
     Default = false,
@@ -314,250 +319,162 @@ Tab3:AddToggle({
 })
 
 -- AIMBOT TAB
-local function aimbot1x1x1x1(state)
-    aimbot1x1 = state
 
-    if state and game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character.Name ~= "1x1x1x1" then
+local function killerAimbot(state, loopName)
+    local loopVar = _G[loopName]
+    local player = game.Players.LocalPlayer
+    
+    -- Проверяем роль убийцы
+    local isKiller = workspace.Players.Killers:FindFirstChild(player.Name) ~= nil
+    if state and not isKiller then
         return
     end
 
     if state then
-        aimbot1x1loop = task.spawn(function()
-            while aimbot1x1 do
-                local character = game.Players.LocalPlayer.Character
+        _G[loopName] = task.spawn(function()
+            while state and isKiller do
+                local character = player.Character
                 if character and character:FindFirstChild("HumanoidRootPart") then
-                    local survivors = {}
-                    for _, player in pairs(game.Players:GetPlayers()) do
-                        if player ~= game.Players.LocalPlayer then
-                            local survivorChar = player.Character
-                            if survivorChar and survivorChar:FindFirstChild("HumanoidRootPart") then
-                                table.insert(survivors, survivorChar)
-                            end
+                    local targets = {}
+                    local survivorsFolder = workspace.Players.Survivors
+                    
+                    -- Собираем выживших
+                    for _, survivor in pairs(survivorsFolder:GetChildren()) do
+                        if survivor:IsA("Model") and survivor:FindFirstChild("HumanoidRootPart") then
+                            table.insert(targets, survivor)
                         end
                     end
                     
-                    local nearestSurvivor = nil
+                    -- Ищем ближайшего выжившего
+                    local nearestTarget = nil
                     local shortestDistance = math.huge
                     local playerHRP = character.HumanoidRootPart
                     
-                    for _, survivor in ipairs(survivors) do
-                        local survivorHRP = survivor.HumanoidRootPart
-                        local distance = (survivorHRP.Position - playerHRP.Position).Magnitude
+                    for _, target in ipairs(targets) do
+                        local targetHRP = target.HumanoidRootPart
+                        local distance = (targetHRP.Position - playerHRP.Position).Magnitude
                         if distance < shortestDistance then
                             shortestDistance = distance
-                            nearestSurvivor = survivor
+                            nearestTarget = target
                         end
                     end
                     
-                    if nearestSurvivor then
-                        local nearestHRP = nearestSurvivor.HumanoidRootPart
-                        workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, nearestHRP.Position)
-                        playerHRP.CFrame = CFrame.lookAt(playerHRP.Position, Vector3.new(nearestHRP.Position.X, nearestHRP.Position.Y, nearestHRP.Position.Z))
+                    -- Наводимся на цель
+                    if nearestTarget then
+                        local targetHRP = nearestTarget.HumanoidRootPart
+                        workspace.CurrentCamera.CFrame = CFrame.new(
+                            workspace.CurrentCamera.CFrame.Position, 
+                            targetHRP.Position
+                        )
+                        playerHRP.CFrame = CFrame.lookAt(
+                            playerHRP.Position, 
+                            Vector3.new(targetHRP.Position.X, targetHRP.Position.Y, targetHRP.Position.Z)
+                        )
                     end
                 end
                 task.wait(0.01)
             end
         end)
-    elseif aimbot1x1loop then
-        task.cancel(aimbot1x1loop)
-        aimbot1x1loop = nil
+    elseif loopVar then
+        task.cancel(loopVar)
+        _G[loopName] = nil
     end
 end
 
+local function survivorAimbot(state, loopName)
+    local loopVar = _G[loopName]
+    local player = game.Players.LocalPlayer
+    
+    -- Проверяем роль выжившего
+    local isSurvivor = workspace.Players.Survivors:FindFirstChild(player.Name) ~= nil
+    if state and not isSurvivor then
+        return
+    end
+
+    if state then
+        _G[loopName] = task.spawn(function()
+            while state and isSurvivor do
+                local character = player.Character
+                if character and character:FindFirstChild("HumanoidRootPart") then
+                    local targets = {}
+                    local killersFolder = workspace.Players.Killers
+                    
+                    -- Собираем убийц
+                    for _, killer in pairs(killersFolder:GetChildren()) do
+                        if killer:IsA("Model") and killer:FindFirstChild("HumanoidRootPart") then
+                            table.insert(targets, killer)
+                        end
+                    end
+                    
+                    -- Ищем ближайшего убийцу
+                    local nearestTarget = nil
+                    local shortestDistance = math.huge
+                    local playerHRP = character.HumanoidRootPart
+                    
+                    for _, target in ipairs(targets) do
+                        local targetHRP = target.HumanoidRootPart
+                        local distance = (targetHRP.Position - playerHRP.Position).Magnitude
+                        if distance < shortestDistance then
+                            shortestDistance = distance
+                            nearestTarget = target
+                        end
+                    end
+                    
+                    -- Наводимся на цель
+                    if nearestTarget then
+                        local targetHRP = nearestTarget.HumanoidRootPart
+                        workspace.CurrentCamera.CFrame = CFrame.new(
+                            workspace.CurrentCamera.CFrame.Position, 
+                            targetHRP.Position
+                        )
+                        playerHRP.CFrame = CFrame.lookAt(
+                            playerHRP.Position, 
+                            Vector3.new(targetHRP.Position.X, targetHRP.Position.Y, targetHRP.Position.Z)
+                        )
+                    end
+                end
+                task.wait(0.01)
+            end
+        end)
+    elseif loopVar then
+        task.cancel(loopVar)
+        _G[loopName] = nil
+    end
+end
+
+-- Аимботы для убийц
 Tab4:AddToggle({
     Name = "1x1x1x1 AIMBOT",
     Default = false,
     Callback = function(state)
-        aimbot1x1x1x1(state)
+        killerAimbot(state, "aimbot1x1loop")
     end
 })
-
-local function johnaimbot(state)
-    johnaim = state
-
-    if state and game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character.Name ~= "JohnDoe" then
-        return
-    end
-
-    if state then
-        johnloop = task.spawn(function()
-            while johnaim do
-                local character = game.Players.LocalPlayer.Character
-                if character and character:FindFirstChild("HumanoidRootPart") then
-                    local survivors = {}
-                    for _, player in pairs(game.Players:GetPlayers()) do
-                        if player ~= game.Players.LocalPlayer then
-                            local survivorChar = player.Character
-                            if survivorChar and survivorChar:FindFirstChild("HumanoidRootPart") then
-                                table.insert(survivors, survivorChar)
-                            end
-                        end
-                    end
-                    
-                    local nearestSurvivor = nil
-                    local shortestDistance = math.huge
-                    local playerHRP = character.HumanoidRootPart
-                    
-                    for _, survivor in ipairs(survivors) do
-                        local survivorHRP = survivor.HumanoidRootPart
-                        local distance = (survivorHRP.Position - playerHRP.Position).Magnitude
-                        if distance < shortestDistance then
-                            shortestDistance = distance
-                            nearestSurvivor = survivor
-                        end
-                    end
-                    
-                    if nearestSurvivor then
-                        local nearestHRP = nearestSurvivor.HumanoidRootPart
-                        workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, nearestHRP.Position)
-                        playerHRP.CFrame = CFrame.lookAt(playerHRP.Position, Vector3.new(nearestHRP.Position.X, nearestHRP.Position.Y, nearestHRP.Position.Z))
-                    end
-                end
-                task.wait(0.01)
-            end
-        end)
-    elseif johnloop then
-        task.cancel(johnloop)
-        johnloop = nil
-    end
-end
 
 Tab4:AddToggle({
     Name = "JOHNAIM AIMBOT",
     Default = false,
     Callback = function(state)
-        johnaimbot(state) 
+        killerAimbot(state, "johnloop")
     end
 })
-
-local function guestaimbot(state)
-    guestaim = state
-
-    if state and game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character.Name ~= "Guest1337" then
-        return
-    end
-
-    if state then
-        guestloop = task.spawn(function()
-            while guestaim do
-                local character = game.Players.LocalPlayer.Character
-                if character and character:FindFirstChild("HumanoidRootPart") then
-                    local killersFolder = game:GetService("Workspace").Players:FindFirstChild("Killers")
-                    if killersFolder then
-                        local killers = {}
-                        for _, killerModel in pairs(killersFolder:GetChildren()) do
-                            if killerModel:IsA("Model") and killerModel:FindFirstChild("HumanoidRootPart") then
-                                table.insert(killers, killerModel)
-                            end
-                        end
-                        
-                        local nearestKiller = nil
-                        local shortestDistance = math.huge
-                        local playerHRP = character.HumanoidRootPart
-                        
-                        for _, killer in ipairs(killers) do
-                            local killerHRP = killer.HumanoidRootPart
-                            local distance = (killerHRP.Position - playerHRP.Position).Magnitude
-                            if distance < shortestDistance then
-                                shortestDistance = distance
-                                nearestKiller = killer
-                            end
-                        end
-                        
-                        if nearestKiller then
-                            local nearestHRP = nearestKiller.HumanoidRootPart
-                            workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, nearestHRP.Position)
-                            playerHRP.CFrame = CFrame.lookAt(playerHRP.Position, Vector3.new(nearestHRP.Position.X, nearestHRP.Position.Y, nearestHRP.Position.Z))
-                        end
-                    end
-                end
-                task.wait(0.01)
-            end
-        end)
-    elseif guestloop then
-        task.cancel(guestloop)
-        guestloop = nil
-    end
-end
-
-Tab4:AddToggle({
-    Name = "GUEST AIMBOT",
-    Default = false,
-    Callback = function(state)
-        guestaimbot(state)
-    end
-})
-
-local function shedaimbot(state)
-    shedaim = state
-
-    if state and game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character.Name ~= "Shedletsky" then
-        return
-    end
-
-    if state then
-        shedloop = task.spawn(function()
-            while shedaim do
-                local character = game.Players.LocalPlayer.Character
-                if character and character:FindFirstChild("HumanoidRootPart") then
-                    local killersFolder = game:GetService("Workspace").Players:FindFirstChild("Killers")
-                    if killersFolder then
-                        local killers = {}
-                        for _, killerModel in pairs(killersFolder:GetChildren()) do
-                            if killerModel:IsA("Model") and killerModel:FindFirstChild("HumanoidRootPart") then
-                                table.insert(killers, killerModel)
-                            end
-                        end
-                        
-                        local nearestKiller = nil
-                        local shortestDistance = math.huge
-                        local playerHRP = character.HumanoidRootPart
-                        
-                        for _, killer in ipairs(killers) do
-                            local killerHRP = killer.HumanoidRootPart
-                            local distance = (killerHRP.Position - playerHRP.Position).Magnitude
-                            if distance < shortestDistance then
-                                shortestDistance = distance
-                                nearestKiller = killer
-                            end
-                        end
-                        
-                        if nearestKiller then
-                            local nearestHRP = nearestKiller.HumanoidRootPart
-                            workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, nearestHRP.Position)
-                            playerHRP.CFrame = CFrame.lookAt(playerHRP.Position, Vector3.new(nearestHRP.Position.X, nearestHRP.Position.Y, nearestHRP.Position.Z))
-                        end
-                    end
-                end
-                task.wait(0.01)
-            end
-        end)
-    elseif shedloop then
-        task.cancel(shedloop)
-        shedloop = nil
-    end
-end
 
 Tab4:AddToggle({
     Name = "SHEDAIM AIMBOT",
     Default = false,
     Callback = function(state)
-        shedaimbot(state) 
+        killerAimbot(state, "shedloop")
     end
 })
 
--- MISC TAB
-local function bringbackjumppower(state)
-    jumppowerenabled = state
-    if game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid") then
-        if jumppowerenabled then
-            game.Players.LocalPlayer.Character.Humanoid.JumpPower = 50
-        else
-            game.Players.LocalPlayer.Character.Humanoid.JumpPower = 0
-        end
+-- Аимбот для выжившего
+Tab4:AddToggle({
+    Name = "GUEST AIMBOT",
+    Default = false,
+    Callback = function(state)
+        survivorAimbot(state, "guestloop")
     end
-end
-
+})
 Tab5:AddToggle({
     Name = "BRING BACK JUMP POWER",
     Default = false,
@@ -595,5 +512,107 @@ Tab5:AddToggle({
     Default = false,
     Callback = function(state)
         givemesomepizza(state)
+    end
+})
+
+
+-- Добавляем этот код в раздел MISC (Tab5)
+
+-- Переменные для хитбокса
+local hitboxEnabled = false
+local currentHitboxSize = 5
+local hitboxTransparency = 0.7
+local hitboxLoop = nil
+
+-- Функция обновления хитбоксов
+local function updateHitboxes()
+    for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+        if player ~= game.Players.LocalPlayer and player.Character then
+            local humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart")
+            local head = player.Character:FindFirstChild("Head")
+            
+            if humanoidRootPart then
+                humanoidRootPart.Size = Vector3.new(currentHitboxSize, currentHitboxSize, currentHitboxSize)
+                humanoidRootPart.Transparency = hitboxTransparency
+                humanoidRootPart.CanCollide = false
+            end
+            
+            if head then
+                head.Size = Vector3.new(currentHitboxSize, currentHitboxSize, currentHitboxSize)
+                head.Transparency = hitboxTransparency
+                head.CanCollide = false
+            end
+        end
+    end
+end
+
+-- Функция сброса хитбоксов
+local function resetHitboxes()
+    for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+        if player.Character then
+            local humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart")
+            local head = player.Character:FindFirstChild("Head")
+            
+            if humanoidRootPart then
+                humanoidRootPart.Size = Vector3.new(2, 2, 1)
+                humanoidRootPart.Transparency = 0
+                humanoidRootPart.CanCollide = true
+            end
+            
+            if head then
+                head.Size = Vector3.new(1, 1, 1)
+                head.Transparency = 0
+                head.CanCollide = true
+            end
+        end
+    end
+end
+
+-- Добавляем элементы в UI
+Tab5:AddToggle({
+    Name = "HITBOX EXPANDER",
+    Default = false,
+    Callback = function(value)
+        hitboxEnabled = value
+        if hitboxEnabled then
+            -- Запускаем обновление хитбоксов
+            hitboxLoop = game:GetService("RunService").Heartbeat:Connect(function()
+                updateHitboxes()
+            end)
+        else
+            -- Отключаем и сбрасываем хитбоксы
+            if hitboxLoop then
+                hitboxLoop:Disconnect()
+            end
+            resetHitboxes()
+        end
+    end
+})
+
+Tab5:AddSlider({
+    Name = "HITBOX SIZE",
+    Min = 1,
+    Max = 20,
+    Increase = 1,
+    Default = 5,
+    Callback = function(value)
+        currentHitboxSize = value
+        if hitboxEnabled then
+            updateHitboxes()
+        end
+    end
+})
+
+Tab5:AddSlider({
+    Name = "HITBOX TRANSPARENCY",
+    Min = 0,
+    Max = 1,
+    Increase = 0.1,
+    Default = 0.7,
+    Callback = function(value)
+        hitboxTransparency = value
+        if hitboxEnabled then
+            updateHitboxes()
+        end
     end
 })
