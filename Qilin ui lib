@@ -1,352 +1,465 @@
--- UILib.lua
 local UILib = {}
-
--- Сервисы
 local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
 
--- Тема по умолчанию
-UILib.Theme = {
-    PrimaryColor = Color3.fromRGB(25, 25, 25),
-    SecondaryColor = Color3.fromRGB(40, 40, 40),
-    AccentColor = Color3.fromRGB(0, 120, 215),
+-- Стилизация
+local defaultTheme = {
+    MainColor = Color3.fromRGB(45, 45, 45),
+    HeaderColor = Color3.fromRGB(35, 35, 35),
     TextColor = Color3.fromRGB(255, 255, 255),
-    Font = Enum.Font.Gotham,
-    TextSize = 14,
-    CornerRadius = UDim.new(0, 4)
+    AccentColor = Color3.fromRGB(0, 170, 255),
+    BorderColor = Color3.fromRGB(20, 20, 20),
+    CornerRadius = UDim.new(0, 6)
 }
 
--- Вспомогательные функции
-function UILib.Create(instanceType, properties)
-    local instance = Instance.new(instanceType)
-    for property, value in pairs(properties) do
-        instance[property] = value
-    end
-    return instance
-end
-
-function UILib.Tween(instance, properties, duration, easingStyle, easingDirection)
+-- Анимации
+local function tweenProperty(instance, property, value, duration)
     local tweenInfo = TweenInfo.new(
-        duration or 0.2,
-        easingStyle or Enum.EasingStyle.Quad,
-        easingDirection or Enum.EasingDirection.Out
+        duration,
+        Enum.EasingStyle.Quad,
+        Enum.EasingDirection.Out
     )
-    local tween = TweenService:Create(instance, tweenInfo, properties)
+    local tween = TweenService:Create(instance, tweenInfo, {[property] = value})
     tween:Play()
     return tween
 end
 
--- Основные компоненты
-function UILib.NewScreenGui(parent, name)
-    local screenGui = UILib.Create("ScreenGui", {
-        Name = name or "UILibScreenGui",
-        Parent = parent or game.Players.LocalPlayer:WaitForChild("PlayerGui"),
-        ResetOnSpawn = false,
-        ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    })
+-- Создание базового окна
+function UILib:CreateWindow(title)
+    local window = {}
+    window.Visible = true
+    window.Elements = {}
     
-    return screenGui
-end
+    -- Создаем ScreenGui
+    local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "UILibGui"
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screenGui.Parent = playerGui
+    
+    -- Основной контейнер
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "UILibWindow"
+    mainFrame.BackgroundColor3 = defaultTheme.MainColor
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Position = UDim2.new(0.5, -150, 0.5, -200)
+    mainFrame.Size = UDim2.new(0, 300, 0, 400)
+    mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    mainFrame.ClipsDescendants = true
+    mainFrame.Parent = screenGui
+    
+    local corner = Instance.new("UICorner", mainFrame)
+    corner.CornerRadius = defaultTheme.CornerRadius
+    
+    local stroke = Instance.new("UIStroke", mainFrame)
+    stroke.Color = defaultTheme.BorderColor
+    stroke.Thickness = 2
+    
+    -- Заголовок окна
+    local header = Instance.new("Frame")
+    header.Name = "Header"
+    header.BackgroundColor3 = defaultTheme.HeaderColor
+    header.Size = UDim2.new(1, 0, 0, 30)
+    header.BorderSizePixel = 0
+    header.Parent = mainFrame
+    
+    local headerCorner = Instance.new("UICorner", header)
+    headerCorner.CornerRadius = UDim.new(0, 6)
+    
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Name = "Title"
+    titleLabel.Text = title or "UI Window"
+    titleLabel.Font = Enum.Font.Gotham
+    titleLabel.TextColor3 = defaultTheme.TextColor
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Position = UDim2.new(0, 10, 0, 0)
+    titleLabel.Size = UDim2.new(0.7, -10, 1, 0)
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = header
+    
+    -- Кнопка сворачивания
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Name = "ToggleButton"
+    toggleBtn.Text = "-"
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextSize = 20
+    toggleBtn.TextColor3 = defaultTheme.TextColor
+    toggleBtn.BackgroundTransparency = 1
+    toggleBtn.Size = UDim2.new(0, 30, 1, 0)
+    toggleBtn.Position = UDim2.new(1, -30, 0, 0)
+    toggleBtn.Parent = header
+    
+    -- Контейнер для элементов
+    local content = Instance.new("Frame")
+    content.Name = "Content"
+    content.BackgroundTransparency = 1
+    content.Size = UDim2.new(1, -10, 1, -40)
+    content.Position = UDim2.new(0, 5, 0, 35)
+    content.ClipsDescendants = true
+    content.Parent = mainFrame
+    
+    local layout = Instance.new("UIListLayout", content)
+    layout.Padding = UDim.new(0, 5)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    
+    -- Функционал перетаскивания
+    local dragging
+    local dragInput
+    local dragStart
+    local startPos
+    
+    local function updateInput(input)
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(
+            startPos.X.Scale, 
+            startPos.X.Offset + delta.X, 
+            startPos.Y.Scale, 
+            startPos.Y.Offset + delta.Y
+        )
+    end
 
-function UILib.NewFrame(parent, properties)
-    local defaultProperties = {
-        BackgroundColor3 = UILib.Theme.PrimaryColor,
-        BorderSizePixel = 0,
-        Size = UDim2.new(0, 200, 0, 150)
-    }
-    
-    -- Объединяем свойства по умолчанию с переданными свойствами
-    for k, v in pairs(properties or {}) do
-        defaultProperties[k] = v
-    end
-    
-    local frame = UILib.Create("Frame", defaultProperties)
-    
-    -- Добавляем скругление углов
-    local corner = UILib.Create("UICorner", {
-        CornerRadius = UILib.Theme.CornerRadius,
-        Parent = frame
-    })
-    
-    frame.Parent = parent
-    return frame
-end
-
-function UILib.NewTextLabel(parent, properties)
-    local defaultProperties = {
-        BackgroundTransparency = 1,
-        Font = UILib.Theme.Font,
-        TextColor3 = UILib.Theme.TextColor,
-        TextSize = UILib.Theme.TextSize,
-        Size = UDim2.new(1, 0, 0, 20),
-        Text = "Label"
-    }
-    
-    for k, v in pairs(properties or {}) do
-        defaultProperties[k] = v
-    end
-    
-    local label = UILib.Create("TextLabel", defaultProperties)
-    label.Parent = parent
-    return label
-end
-
-function UILib.NewButton(parent, properties, onClick)
-    local defaultProperties = {
-        BackgroundColor3 = UILib.Theme.SecondaryColor,
-        BorderSizePixel = 0,
-        Size = UDim2.new(0, 120, 0, 40),
-        AutoButtonColor = false,
-        Text = "Button",
-        Font = UILib.Theme.Font,
-        TextColor3 = UILib.Theme.TextColor,
-        TextSize = UILib.Theme.TextSize
-    }
-    
-    for k, v in pairs(properties or {}) do
-        defaultProperties[k] = v
-    end
-    
-    local button = UILib.Create("TextButton", defaultProperties)
-    
-    -- Добавляем скругление углов
-    local corner = UILib.Create("UICorner", {
-        CornerRadius = UILib.Theme.CornerRadius,
-        Parent = button
-    })
-    
-    -- Эффекты при наведении
-    local originalColor = button.BackgroundColor3
-    local hoverColor = UILib.Theme.AccentColor
-    
-    button.MouseEnter:Connect(function()
-        UILib.Tween(button, {BackgroundColor3 = hoverColor}, 0.2)
-    end)
-    
-    button.MouseLeave:Connect(function()
-        UILib.Tween(button, {BackgroundColor3 = originalColor}, 0.2)
-    end)
-    
-    button.MouseButton1Down:Connect(function()
-        UILib.Tween(button, {Size = UDim2.new(button.Size.X.Scale, button.Size.X.Offset - 2, button.Size.Y.Scale, button.Size.Y.Offset - 2)}, 0.1)
-    end)
-    
-    button.MouseButton1Up:Connect(function()
-        UILib.Tween(button, {Size = UDim2.new(button.Size.X.Scale, button.Size.X.Offset + 2, button.Size.Y.Scale, button.Size.Y.Offset + 2)}, 0.1)
-        if onClick then onClick() end
-    end)
-    
-    button.Parent = parent
-    return button
-end
-
-function UILib.NewTextBox(parent, properties, onTextChanged)
-    local defaultProperties = {
-        BackgroundColor3 = UILib.Theme.SecondaryColor,
-        BorderSizePixel = 0,
-        Size = UDim2.new(0, 200, 0, 40),
-        Font = UILib.Theme.Font,
-        TextColor3 = UILib.Theme.TextColor,
-        TextSize = UILib.Theme.TextSize,
-        PlaceholderText = "Enter text...",
-        ClearTextOnFocus = false,
-        Text = ""
-    }
-    
-    for k, v in pairs(properties or {}) do
-        defaultProperties[k] = v
-    end
-    
-    local textBox = UILib.Create("TextBox", defaultProperties)
-    
-    -- Добавляем скругление углов
-    local corner = UILib.Create("UICorner", {
-        CornerRadius = UILib.Theme.CornerRadius,
-        Parent = textBox
-    })
-    
-    -- Эффекты при фокусе
-    local originalColor = textBox.BackgroundColor3
-    local focusColor = Color3.new(
-        originalColor.R * 1.2,
-        originalColor.G * 1.2,
-        originalColor.B * 1.2
-    )
-    
-    textBox.Focused:Connect(function()
-        UILib.Tween(textBox, {BackgroundColor3 = focusColor}, 0.2)
-    end)
-    
-    textBox.FocusLost:Connect(function()
-        UILib.Tween(textBox, {BackgroundColor3 = originalColor}, 0.2)
-    end)
-    
-    if onTextChanged then
-        textBox:GetPropertyChangedSignal("Text"):Connect(function()
-            onTextChanged(textBox.Text)
-        end)
-    end
-    
-    textBox.Parent = parent
-    return textBox
-end
-
-function UILib.NewToggle(parent, properties, onToggle)
-    local defaultProperties = {
-        BackgroundColor3 = UILib.Theme.SecondaryColor,
-        BorderSizePixel = 0,
-        Size = UDim2.new(0, 40, 0, 20),
-        AutoButtonColor = false
-    }
-    
-    for k, v in pairs(properties or {}) do
-        defaultProperties[k] = v
-    end
-    
-    local toggleFrame = UILib.Create("Frame", defaultProperties)
-    local corner = UILib.Create("UICorner", {
-        CornerRadius = UDim.new(1, 0),
-        Parent = toggleFrame
-    })
-    
-    local toggleButton = UILib.Create("TextButton", {
-        Size = UDim2.new(0, 16, 0, 16),
-        Position = UDim2.new(0, 2, 0.5, -8),
-        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-        BorderSizePixel = 0,
-        Parent = toggleFrame,
-        Text = ""
-    })
-    
-    local buttonCorner = UILib.Create("UICorner", {
-        CornerRadius = UDim.new(1, 0),
-        Parent = toggleButton
-    })
-    
-    local isToggled = false
-    
-    local function updateToggle()
-        if isToggled then
-            UILib.Tween(toggleButton, {
-                Position = UDim2.new(1, -18, 0.5, -8),
-                BackgroundColor3 = UILib.Theme.AccentColor
-            }, 0.2)
-            UILib.Tween(toggleFrame, {
-                BackgroundColor3 = Color3.new(
-                    UILib.Theme.AccentColor.R * 0.3,
-                    UILib.Theme.AccentColor.G * 0.3,
-                    UILib.Theme.AccentColor.B * 0.3
-                )
-            }, 0.2)
-        else
-            UILib.Tween(toggleButton, {
-                Position = UDim2.new(0, 2, 0.5, -8),
-                BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            }, 0.2)
-            UILib.Tween(toggleFrame, {
-                BackgroundColor3 = UILib.Theme.SecondaryColor
-            }, 0.2)
-        end
-    end
-    
-    toggleButton.MouseButton1Click:Connect(function()
-        isToggled = not isToggled
-        updateToggle()
-        if onToggle then onToggle(isToggled) end
-    end)
-    
-    toggleFrame.Parent = parent
-    return toggleFrame, function() return isToggled end, function(state)
-        isToggled = state
-        updateToggle()
-    end
-end
-
-function UILib.NewSlider(parent, properties, onValueChanged)
-    local defaultProperties = {
-        BackgroundColor3 = UILib.Theme.SecondaryColor,
-        BorderSizePixel = 0,
-        Size = UDim2.new(0, 200, 0, 10),
-        ClipsDescendants = true
-    }
-    
-    for k, v in pairs(properties or {}) do
-        defaultProperties[k] = v
-    end
-    
-    local sliderFrame = UILib.Create("Frame", defaultProperties)
-    local corner = UILib.Create("UICorner", {
-        CornerRadius = UDim.new(1, 0),
-        Parent = sliderFrame
-    })
-    
-    local fillFrame = UILib.Create("Frame", {
-        BackgroundColor3 = UILib.Theme.AccentColor,
-        BorderSizePixel = 0,
-        Size = UDim2.new(0.5, 0, 1, 0),
-        Parent = sliderFrame
-    })
-    
-    local fillCorner = UILib.Create("UICorner", {
-        CornerRadius = UDim.new(1, 0),
-        Parent = fillFrame
-    })
-    
-    local sliderButton = UILib.Create("TextButton", {
-        Size = UDim2.new(0, 20, 0, 20),
-        Position = UDim2.new(0.5, -10, 0.5, -10),
-        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-        BorderSizePixel = 0,
-        Parent = sliderFrame,
-        Text = ""
-    })
-    
-    local buttonCorner = UILib.Create("UICorner", {
-        CornerRadius = UDim.new(1, 0),
-        Parent = sliderButton
-    })
-    
-    local isDragging = false
-    local minValue = properties.MinValue or 0
-    local maxValue = properties.MaxValue or 100
-    local currentValue = properties.InitialValue or (maxValue + minValue) / 2
-    
-    local function updateSlider(value)
-        value = math.clamp(value, minValue, maxValue)
-        currentValue = value
-        local percent = (value - minValue) / (maxValue - minValue)
-        fillFrame.Size = UDim2.new(percent, 0, 1, 0)
-        sliderButton.Position = UDim2.new(percent, -10, 0.5, -10)
-        
-        if onValueChanged then
-            onValueChanged(value)
-        end
-    end
-    
-    sliderButton.MouseButton1Down:Connect(function()
-        isDragging = true
-    end)
-    
-    UserInputService.InputEnded:Connect(function(input)
+    header.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            isDragging = false
+            dragging = true
+            dragStart = input.Position
+            startPos = mainFrame.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    header.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            updateInput(input)
         end
     end)
     
-    RunService.Heartbeat:Connect(function()
-        if isDragging then
-            local mousePos = UserInputService:GetMouseLocation()
-            local sliderPos = sliderFrame.AbsolutePosition
-            local sliderSize = sliderFrame.AbsoluteSize
-            local relativeX = math.clamp((mousePos.X - sliderPos.X) / sliderSize.X, 0, 1)
-            local value = minValue + (maxValue - minValue) * relativeX
-            updateSlider(value)
+    -- Сворачивание/разворачивание
+    local isExpanded = true
+    local originalSize = mainFrame.Size
+    
+    toggleBtn.MouseButton1Click:Connect(function()
+        isExpanded = not isExpanded
+        if isExpanded then
+            toggleBtn.Text = "-"
+            tweenProperty(mainFrame, "Size", originalSize, 0.2)
+        else
+            toggleBtn.Text = "+"
+            tweenProperty(mainFrame, "Size", UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, 30), 0.2)
         end
     end)
     
-    sliderFrame.Parent = parent
-    return sliderFrame, function() return currentValue end, function(value) updateSlider(value) end
+    -- Функции для элементов
+    function window:AddButton(text, callback)
+        local button = Instance.new("TextButton")
+        button.Name = "Button_" .. text
+        button.Text = text
+        button.Font = Enum.Font.Gotham
+        button.TextColor3 = defaultTheme.TextColor
+        button.BackgroundColor3 = defaultTheme.HeaderColor
+        button.AutoButtonColor = false
+        button.Size = UDim2.new(1, 0, 0, 30)
+        button.LayoutOrder = #self.Elements + 1
+        button.Parent = content
+        
+        local buttonCorner = Instance.new("UICorner", button)
+        buttonCorner.CornerRadius = UDim.new(0, 4)
+        
+        local stroke = Instance.new("UIStroke", button)
+        stroke.Color = defaultTheme.BorderColor
+        stroke.Thickness = 1
+        
+        -- Анимация наведения
+        button.MouseEnter:Connect(function()
+            tweenProperty(button, "BackgroundColor3", defaultTheme.HeaderColor:lerp(Color3.new(1,1,1), 0.15), 0.2)
+        end)
+        
+        button.MouseLeave:Connect(function()
+            tweenProperty(button, "BackgroundColor3", defaultTheme.HeaderColor, 0.2)
+        end)
+        
+        button.MouseButton1Click:Connect(function()
+            tweenProperty(button, "BackgroundColor3", defaultTheme.AccentColor, 0.1):Wait()
+            tweenProperty(button, "BackgroundColor3", defaultTheme.HeaderColor, 0.2)
+            if callback then callback() end
+        end)
+        
+        table.insert(self.Elements, button)
+        return button
+    end
+
+    function window:AddToggle(text, callback)
+        local toggle = {}
+        local state = false
+        
+        local toggleFrame = Instance.new("Frame")
+        toggleFrame.Name = "Toggle_" .. text
+        toggleFrame.BackgroundTransparency = 1
+        toggleFrame.Size = UDim2.new(1, 0, 0, 30)
+        toggleFrame.LayoutOrder = #self.Elements + 1
+        toggleFrame.Parent = content
+        
+        local label = Instance.new("TextLabel")
+        label.Text = text
+        label.Font = Enum.Font.Gotham
+        label.TextColor3 = defaultTheme.TextColor
+        label.BackgroundTransparency = 1
+        label.Size = UDim2.new(0.7, 0, 1, 0)
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = toggleFrame
+        
+        local toggleContainer = Instance.new("Frame")
+        toggleContainer.Size = UDim2.new(0, 50, 0, 25)
+        toggleContainer.Position = UDim2.new(1, -50, 0.5, -12)
+        toggleContainer.AnchorPoint = Vector2.new(1, 0.5)
+        toggleContainer.BackgroundColor3 = defaultTheme.HeaderColor
+        toggleContainer.Parent = toggleFrame
+        
+        local toggleCorner = Instance.new("UICorner", toggleContainer)
+        toggleCorner.CornerRadius = UDim.new(1, 0)
+        
+        local toggleButton = Instance.new("Frame")
+        toggleButton.Size = UDim2.new(0, 21, 0, 21)
+        toggleButton.Position = UDim2.new(0, 2, 0.5, -10)
+        toggleButton.BackgroundColor3 = defaultTheme.TextColor
+        toggleButton.Parent = toggleContainer
+        
+        local buttonCorner = Instance.new("UICorner", toggleButton)
+        buttonCorner.CornerRadius = UDim.new(1, 0)
+        
+        local function updateToggle()
+            if state then
+                tweenProperty(toggleButton, "Position", UDim2.new(1, -23, 0.5, -10), 0.2)
+                tweenProperty(toggleContainer, "BackgroundColor3", defaultTheme.AccentColor, 0.2)
+            else
+                tweenProperty(toggleButton, "Position", UDim2.new(0, 2, 0.5, -10), 0.2)
+                tweenProperty(toggleContainer, "BackgroundColor3", defaultTheme.HeaderColor, 0.2)
+            end
+        end
+        
+        toggleContainer.MouseButton1Click:Connect(function()
+            state = not state
+            updateToggle()
+            if callback then callback(state) end
+        end)
+        
+        table.insert(self.Elements, toggleFrame)
+        return toggle
+    end
+
+    function window:AddSlider(text, min, max, default, callback)
+        local slider = {}
+        local current = default or min
+        
+        local sliderFrame = Instance.new("Frame")
+        sliderFrame.Name = "Slider_" .. text
+        sliderFrame.BackgroundTransparency = 1
+        sliderFrame.Size = UDim2.new(1, 0, 0, 50)
+        sliderFrame.LayoutOrder = #self.Elements + 1
+        sliderFrame.Parent = content
+        
+        local label = Instance.new("TextLabel")
+        label.Text = text
+        label.Font = Enum.Font.Gotham
+        label.TextColor3 = defaultTheme.TextColor
+        label.BackgroundTransparency = 1
+        label.Size = UDim2.new(1, 0, 0.5, 0)
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = sliderFrame
+        
+        local valueLabel = Instance.new("TextLabel")
+        valueLabel.Name = "ValueLabel"
+        valueLabel.Text = tostring(default or min)
+        valueLabel.Font = Enum.Font.Gotham
+        valueLabel.TextColor3 = defaultTheme.TextColor
+        valueLabel.BackgroundTransparency = 1
+        valueLabel.Size = UDim2.new(0.3, 0, 0.5, 0)
+        valueLabel.Position = UDim2.new(1, -50, 0, 0)
+        valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+        valueLabel.Parent = sliderFrame
+        
+        local track = Instance.new("Frame")
+        track.Size = UDim2.new(1, 0, 0, 5)
+        track.Position = UDim2.new(0, 0, 1, -10)
+        track.BackgroundColor3 = defaultTheme.HeaderColor
+        track.Parent = sliderFrame
+        
+        local trackCorner = Instance.new("UICorner", track)
+        trackCorner.CornerRadius = UDim.new(1, 0)
+        
+        local fill = Instance.new("Frame")
+        fill.Size = UDim2.new(0, 0, 1, 0)
+        fill.BackgroundColor3 = defaultTheme.AccentColor
+        fill.Parent = track
+        
+        local fillCorner = Instance.new("UICorner", fill)
+        fillCorner.CornerRadius = UDim.new(1, 0)
+        
+        local thumb = Instance.new("Frame")
+        thumb.Size = UDim2.new(0, 15, 0, 15)
+        thumb.BackgroundColor3 = Color3.new(1,1,1)
+        thumb.Position = UDim2.new(0, 0, 0.5, -7)
+        thumb.Parent = track
+        thumb.ZIndex = 2
+        
+        local thumbCorner = Instance.new("UICorner", thumb)
+        thumbCorner.CornerRadius = UDim.new(1, 0)
+        
+        local function updateSlider(value)
+            current = math.clamp(value, min, max)
+            local percent = (current - min) / (max - min)
+            fill.Size = UDim2.new(percent, 0, 1, 0)
+            thumb.Position = UDim2.new(percent, -7, 0.5, -7)
+            valueLabel.Text = string.format("%.1f", current)
+            if callback then callback(current) end
+        end
+        
+        local dragging = false
+        
+        thumb.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+            end
+        end)
+        
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = false
+            end
+        end)
+        
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                local pos = track.AbsolutePosition
+                local size = track.AbsoluteSize
+                local relative = (input.Position.X - pos.X) / size.X
+                updateSlider(min + (max - min) * relative)
+            end
+        end)
+        
+        updateSlider(current)
+        table.insert(self.Elements, sliderFrame)
+        return slider
+    end
+
+    function window:AddDropdown(text, options, callback)
+        local dropdown = {}
+        local isOpen = false
+        
+        local dropdownFrame = Instance.new("Frame")
+        dropdownFrame.Name = "Dropdown_" .. text
+        dropdownFrame.BackgroundTransparency = 1
+        dropdownFrame.Size = UDim2.new(1, 0, 0, 30)
+        dropdownFrame.LayoutOrder = #self.Elements + 1
+        dropdownFrame.ClipsDescendants = true
+        dropdownFrame.Parent = content
+        
+        local mainButton = Instance.new("TextButton")
+        mainButton.Text = text
+        mainButton.Font = Enum.Font.Gotham
+        mainButton.TextColor3 = defaultTheme.TextColor
+        mainButton.BackgroundColor3 = defaultTheme.HeaderColor
+        mainButton.AutoButtonColor = false
+        mainButton.Size = UDim2.new(1, 0, 0, 30)
+        mainButton.TextXAlignment = Enum.TextXAlignment.Left
+        mainButton.Parent = dropdownFrame
+        
+        local buttonPadding = Instance.new("UIPadding", mainButton)
+        buttonPadding.PaddingLeft = UDim.new(0, 10)
+        
+        local buttonCorner = Instance.new("UICorner", mainButton)
+        buttonCorner.CornerRadius = UDim.new(0, 4)
+        
+        local arrow = Instance.new("TextLabel")
+        arrow.Text = "▼"
+        arrow.Font = Enum.Font.Gotham
+        arrow.TextColor3 = defaultTheme.TextColor
+        arrow.BackgroundTransparency = 1
+        arrow.Size = UDim2.new(0, 20, 1, 0)
+        arrow.Position = UDim2.new(1, -20, 0, 0)
+        arrow.Parent = mainButton
+        
+        local optionsFrame = Instance.new("Frame")
+        optionsFrame.Name = "Options"
+        optionsFrame.BackgroundColor3 = defaultTheme.MainColor
+        optionsFrame.Size = UDim2.new(1, 0, 0, 0)
+        optionsFrame.Position = UDim2.new(0, 0, 0, 35)
+        optionsFrame.Visible = false
+        optionsFrame.Parent = dropdownFrame
+        
+        local optionsLayout = Instance.new("UIListLayout", optionsFrame)
+        optionsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        
+        local function toggleDropdown()
+            isOpen = not isOpen
+            if isOpen then
+                optionsFrame.Visible = true
+                tweenProperty(optionsFrame, "Size", UDim2.new(1, 0, 0, #options * 30), 0.2)
+                tweenProperty(arrow, "Rotation", 180, 0.2)
+            else
+                tweenProperty(optionsFrame, "Size", UDim2.new(1, 0, 0, 0), 0.2):Wait()
+                optionsFrame.Visible = false
+                tweenProperty(arrow, "Rotation", 0, 0.2)
+            end
+        end
+        
+        mainButton.MouseButton1Click:Connect(toggleDropdown)
+        
+        for i, option in ipairs(options) do
+            local optionButton = Instance.new("TextButton")
+            optionButton.Text = option
+            optionButton.Font = Enum.Font.Gotham
+            optionButton.TextColor3 = defaultTheme.TextColor
+            optionButton.BackgroundColor3 = defaultTheme.HeaderColor
+            optionButton.AutoButtonColor = false
+            optionButton.Size = UDim2.new(1, -5, 0, 25)
+            optionButton.Position = UDim2.new(0, 5, 0, (i-1)*30)
+            optionButton.LayoutOrder = i
+            optionButton.Parent = optionsFrame
+            
+            local optionCorner = Instance.new("UICorner", optionButton)
+            optionCorner.CornerRadius = UDim.new(0, 4)
+            
+            optionButton.MouseEnter:Connect(function()
+                tweenProperty(optionButton, "BackgroundColor3", defaultTheme.HeaderColor:lerp(Color3.new(1,1,1), 0.15), 0.2)
+            end)
+            
+            optionButton.MouseLeave:Connect(function()
+                tweenProperty(optionButton, "BackgroundColor3", defaultTheme.HeaderColor, 0.2)
+            end)
+            
+            optionButton.MouseButton1Click:Connect(function()
+                mainButton.Text = text .. ": " .. option
+                if callback then callback(option) end
+                toggleDropdown()
+            end)
+        end
+        
+        table.insert(self.Elements, dropdownFrame)
+        return dropdown
+    end
+    
+    function window:SetVisible(state)
+        screenGui.Enabled = state
+        window.Visible = state
+    end
+    
+    function window:Destroy()
+        screenGui:Destroy()
+    end
+    
+    return window
 end
 
 return UILib
