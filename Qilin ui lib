@@ -1,0 +1,352 @@
+-- UILib.lua
+local UILib = {}
+
+-- Сервисы
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+-- Тема по умолчанию
+UILib.Theme = {
+    PrimaryColor = Color3.fromRGB(25, 25, 25),
+    SecondaryColor = Color3.fromRGB(40, 40, 40),
+    AccentColor = Color3.fromRGB(0, 120, 215),
+    TextColor = Color3.fromRGB(255, 255, 255),
+    Font = Enum.Font.Gotham,
+    TextSize = 14,
+    CornerRadius = UDim.new(0, 4)
+}
+
+-- Вспомогательные функции
+function UILib.Create(instanceType, properties)
+    local instance = Instance.new(instanceType)
+    for property, value in pairs(properties) do
+        instance[property] = value
+    end
+    return instance
+end
+
+function UILib.Tween(instance, properties, duration, easingStyle, easingDirection)
+    local tweenInfo = TweenInfo.new(
+        duration or 0.2,
+        easingStyle or Enum.EasingStyle.Quad,
+        easingDirection or Enum.EasingDirection.Out
+    )
+    local tween = TweenService:Create(instance, tweenInfo, properties)
+    tween:Play()
+    return tween
+end
+
+-- Основные компоненты
+function UILib.NewScreenGui(parent, name)
+    local screenGui = UILib.Create("ScreenGui", {
+        Name = name or "UILibScreenGui",
+        Parent = parent or game.Players.LocalPlayer:WaitForChild("PlayerGui"),
+        ResetOnSpawn = false,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    })
+    
+    return screenGui
+end
+
+function UILib.NewFrame(parent, properties)
+    local defaultProperties = {
+        BackgroundColor3 = UILib.Theme.PrimaryColor,
+        BorderSizePixel = 0,
+        Size = UDim2.new(0, 200, 0, 150)
+    }
+    
+    -- Объединяем свойства по умолчанию с переданными свойствами
+    for k, v in pairs(properties or {}) do
+        defaultProperties[k] = v
+    end
+    
+    local frame = UILib.Create("Frame", defaultProperties)
+    
+    -- Добавляем скругление углов
+    local corner = UILib.Create("UICorner", {
+        CornerRadius = UILib.Theme.CornerRadius,
+        Parent = frame
+    })
+    
+    frame.Parent = parent
+    return frame
+end
+
+function UILib.NewTextLabel(parent, properties)
+    local defaultProperties = {
+        BackgroundTransparency = 1,
+        Font = UILib.Theme.Font,
+        TextColor3 = UILib.Theme.TextColor,
+        TextSize = UILib.Theme.TextSize,
+        Size = UDim2.new(1, 0, 0, 20),
+        Text = "Label"
+    }
+    
+    for k, v in pairs(properties or {}) do
+        defaultProperties[k] = v
+    end
+    
+    local label = UILib.Create("TextLabel", defaultProperties)
+    label.Parent = parent
+    return label
+end
+
+function UILib.NewButton(parent, properties, onClick)
+    local defaultProperties = {
+        BackgroundColor3 = UILib.Theme.SecondaryColor,
+        BorderSizePixel = 0,
+        Size = UDim2.new(0, 120, 0, 40),
+        AutoButtonColor = false,
+        Text = "Button",
+        Font = UILib.Theme.Font,
+        TextColor3 = UILib.Theme.TextColor,
+        TextSize = UILib.Theme.TextSize
+    }
+    
+    for k, v in pairs(properties or {}) do
+        defaultProperties[k] = v
+    end
+    
+    local button = UILib.Create("TextButton", defaultProperties)
+    
+    -- Добавляем скругление углов
+    local corner = UILib.Create("UICorner", {
+        CornerRadius = UILib.Theme.CornerRadius,
+        Parent = button
+    })
+    
+    -- Эффекты при наведении
+    local originalColor = button.BackgroundColor3
+    local hoverColor = UILib.Theme.AccentColor
+    
+    button.MouseEnter:Connect(function()
+        UILib.Tween(button, {BackgroundColor3 = hoverColor}, 0.2)
+    end)
+    
+    button.MouseLeave:Connect(function()
+        UILib.Tween(button, {BackgroundColor3 = originalColor}, 0.2)
+    end)
+    
+    button.MouseButton1Down:Connect(function()
+        UILib.Tween(button, {Size = UDim2.new(button.Size.X.Scale, button.Size.X.Offset - 2, button.Size.Y.Scale, button.Size.Y.Offset - 2)}, 0.1)
+    end)
+    
+    button.MouseButton1Up:Connect(function()
+        UILib.Tween(button, {Size = UDim2.new(button.Size.X.Scale, button.Size.X.Offset + 2, button.Size.Y.Scale, button.Size.Y.Offset + 2)}, 0.1)
+        if onClick then onClick() end
+    end)
+    
+    button.Parent = parent
+    return button
+end
+
+function UILib.NewTextBox(parent, properties, onTextChanged)
+    local defaultProperties = {
+        BackgroundColor3 = UILib.Theme.SecondaryColor,
+        BorderSizePixel = 0,
+        Size = UDim2.new(0, 200, 0, 40),
+        Font = UILib.Theme.Font,
+        TextColor3 = UILib.Theme.TextColor,
+        TextSize = UILib.Theme.TextSize,
+        PlaceholderText = "Enter text...",
+        ClearTextOnFocus = false,
+        Text = ""
+    }
+    
+    for k, v in pairs(properties or {}) do
+        defaultProperties[k] = v
+    end
+    
+    local textBox = UILib.Create("TextBox", defaultProperties)
+    
+    -- Добавляем скругление углов
+    local corner = UILib.Create("UICorner", {
+        CornerRadius = UILib.Theme.CornerRadius,
+        Parent = textBox
+    })
+    
+    -- Эффекты при фокусе
+    local originalColor = textBox.BackgroundColor3
+    local focusColor = Color3.new(
+        originalColor.R * 1.2,
+        originalColor.G * 1.2,
+        originalColor.B * 1.2
+    )
+    
+    textBox.Focused:Connect(function()
+        UILib.Tween(textBox, {BackgroundColor3 = focusColor}, 0.2)
+    end)
+    
+    textBox.FocusLost:Connect(function()
+        UILib.Tween(textBox, {BackgroundColor3 = originalColor}, 0.2)
+    end)
+    
+    if onTextChanged then
+        textBox:GetPropertyChangedSignal("Text"):Connect(function()
+            onTextChanged(textBox.Text)
+        end)
+    end
+    
+    textBox.Parent = parent
+    return textBox
+end
+
+function UILib.NewToggle(parent, properties, onToggle)
+    local defaultProperties = {
+        BackgroundColor3 = UILib.Theme.SecondaryColor,
+        BorderSizePixel = 0,
+        Size = UDim2.new(0, 40, 0, 20),
+        AutoButtonColor = false
+    }
+    
+    for k, v in pairs(properties or {}) do
+        defaultProperties[k] = v
+    end
+    
+    local toggleFrame = UILib.Create("Frame", defaultProperties)
+    local corner = UILib.Create("UICorner", {
+        CornerRadius = UDim.new(1, 0),
+        Parent = toggleFrame
+    })
+    
+    local toggleButton = UILib.Create("TextButton", {
+        Size = UDim2.new(0, 16, 0, 16),
+        Position = UDim2.new(0, 2, 0.5, -8),
+        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+        BorderSizePixel = 0,
+        Parent = toggleFrame,
+        Text = ""
+    })
+    
+    local buttonCorner = UILib.Create("UICorner", {
+        CornerRadius = UDim.new(1, 0),
+        Parent = toggleButton
+    })
+    
+    local isToggled = false
+    
+    local function updateToggle()
+        if isToggled then
+            UILib.Tween(toggleButton, {
+                Position = UDim2.new(1, -18, 0.5, -8),
+                BackgroundColor3 = UILib.Theme.AccentColor
+            }, 0.2)
+            UILib.Tween(toggleFrame, {
+                BackgroundColor3 = Color3.new(
+                    UILib.Theme.AccentColor.R * 0.3,
+                    UILib.Theme.AccentColor.G * 0.3,
+                    UILib.Theme.AccentColor.B * 0.3
+                )
+            }, 0.2)
+        else
+            UILib.Tween(toggleButton, {
+                Position = UDim2.new(0, 2, 0.5, -8),
+                BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            }, 0.2)
+            UILib.Tween(toggleFrame, {
+                BackgroundColor3 = UILib.Theme.SecondaryColor
+            }, 0.2)
+        end
+    end
+    
+    toggleButton.MouseButton1Click:Connect(function()
+        isToggled = not isToggled
+        updateToggle()
+        if onToggle then onToggle(isToggled) end
+    end)
+    
+    toggleFrame.Parent = parent
+    return toggleFrame, function() return isToggled end, function(state)
+        isToggled = state
+        updateToggle()
+    end
+end
+
+function UILib.NewSlider(parent, properties, onValueChanged)
+    local defaultProperties = {
+        BackgroundColor3 = UILib.Theme.SecondaryColor,
+        BorderSizePixel = 0,
+        Size = UDim2.new(0, 200, 0, 10),
+        ClipsDescendants = true
+    }
+    
+    for k, v in pairs(properties or {}) do
+        defaultProperties[k] = v
+    end
+    
+    local sliderFrame = UILib.Create("Frame", defaultProperties)
+    local corner = UILib.Create("UICorner", {
+        CornerRadius = UDim.new(1, 0),
+        Parent = sliderFrame
+    })
+    
+    local fillFrame = UILib.Create("Frame", {
+        BackgroundColor3 = UILib.Theme.AccentColor,
+        BorderSizePixel = 0,
+        Size = UDim2.new(0.5, 0, 1, 0),
+        Parent = sliderFrame
+    })
+    
+    local fillCorner = UILib.Create("UICorner", {
+        CornerRadius = UDim.new(1, 0),
+        Parent = fillFrame
+    })
+    
+    local sliderButton = UILib.Create("TextButton", {
+        Size = UDim2.new(0, 20, 0, 20),
+        Position = UDim2.new(0.5, -10, 0.5, -10),
+        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+        BorderSizePixel = 0,
+        Parent = sliderFrame,
+        Text = ""
+    })
+    
+    local buttonCorner = UILib.Create("UICorner", {
+        CornerRadius = UDim.new(1, 0),
+        Parent = sliderButton
+    })
+    
+    local isDragging = false
+    local minValue = properties.MinValue or 0
+    local maxValue = properties.MaxValue or 100
+    local currentValue = properties.InitialValue or (maxValue + minValue) / 2
+    
+    local function updateSlider(value)
+        value = math.clamp(value, minValue, maxValue)
+        currentValue = value
+        local percent = (value - minValue) / (maxValue - minValue)
+        fillFrame.Size = UDim2.new(percent, 0, 1, 0)
+        sliderButton.Position = UDim2.new(percent, -10, 0.5, -10)
+        
+        if onValueChanged then
+            onValueChanged(value)
+        end
+    end
+    
+    sliderButton.MouseButton1Down:Connect(function()
+        isDragging = true
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isDragging = false
+        end
+    end)
+    
+    RunService.Heartbeat:Connect(function()
+        if isDragging then
+            local mousePos = UserInputService:GetMouseLocation()
+            local sliderPos = sliderFrame.AbsolutePosition
+            local sliderSize = sliderFrame.AbsoluteSize
+            local relativeX = math.clamp((mousePos.X - sliderPos.X) / sliderSize.X, 0, 1)
+            local value = minValue + (maxValue - minValue) * relativeX
+            updateSlider(value)
+        end
+    end)
+    
+    sliderFrame.Parent = parent
+    return sliderFrame, function() return currentValue end, function(value) updateSlider(value) end
+end
+
+return UILib
