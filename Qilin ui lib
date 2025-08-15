@@ -2,6 +2,7 @@ local UILib = {}
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 -- Стилизация
 local defaultTheme = {
@@ -12,6 +13,13 @@ local defaultTheme = {
     BorderColor = Color3.fromRGB(20, 20, 20),
     CornerRadius = UDim.new(0, 6)
 }
+
+-- Размеры экрана
+local screenSize = workspace.CurrentCamera.ViewportSize
+local function updateScreenSize()
+    screenSize = workspace.CurrentCamera.ViewportSize
+end
+workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScreenSize)
 
 -- Анимации
 local function tweenProperty(instance, property, value, duration)
@@ -25,8 +33,14 @@ local function tweenProperty(instance, property, value, duration)
     return tween
 end
 
+-- Адаптивные размеры
+local function adaptiveScale(baseSize)
+    local scaleFactor = math.min(screenSize.X / 1200, 1)
+    return UDim2.new(0, baseSize * scaleFactor, 0, baseSize * scaleFactor)
+end
+
 -- Создание базового окна
-function UILib:CreateWindow(title)
+function UILib:CreateWindow(title, position, size)
     local window = {}
     window.Visible = true
     window.Elements = {}
@@ -37,16 +51,22 @@ function UILib:CreateWindow(title)
     screenGui.Name = "UILibGui"
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     screenGui.Parent = playerGui
+    screenGui.ResetOnSpawn = false
     
     -- Основной контейнер
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "UILibWindow"
     mainFrame.BackgroundColor3 = defaultTheme.MainColor
     mainFrame.BorderSizePixel = 0
-    mainFrame.Position = UDim2.new(0.5, -150, 0.5, -200)
-    mainFrame.Size = UDim2.new(0, 300, 0, 400)
     mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
     mainFrame.ClipsDescendants = true
+    
+    -- Адаптивные размеры по умолчанию
+    size = size or UDim2.new(0.3, 0, 0.4, 0)
+    position = position or UDim2.new(0.5, 0, 0.5, 0)
+    
+    mainFrame.Size = size
+    mainFrame.Position = position
     mainFrame.Parent = screenGui
     
     local corner = Instance.new("UICorner", mainFrame)
@@ -102,6 +122,11 @@ function UILib:CreateWindow(title)
     local layout = Instance.new("UIListLayout", content)
     layout.Padding = UDim.new(0, 5)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
+    
+    -- Автоподстройка размера контента
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        content.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y)
+    end)
     
     -- Функционал перетаскивания
     local dragging
@@ -220,7 +245,7 @@ function UILib:CreateWindow(title)
         label.Parent = toggleFrame
         
         local toggleContainer = Instance.new("Frame")
-        toggleContainer.Size = UDim2.new(0, 50, 0, 25)
+        toggleContainer.Size = adaptiveScale(50)
         toggleContainer.Position = UDim2.new(1, -50, 0.5, -12)
         toggleContainer.AnchorPoint = Vector2.new(1, 0.5)
         toggleContainer.BackgroundColor3 = defaultTheme.HeaderColor
@@ -230,7 +255,7 @@ function UILib:CreateWindow(title)
         toggleCorner.CornerRadius = UDim.new(1, 0)
         
         local toggleButton = Instance.new("Frame")
-        toggleButton.Size = UDim2.new(0, 21, 0, 21)
+        toggleButton.Size = adaptiveScale(21)
         toggleButton.Position = UDim2.new(0, 2, 0.5, -10)
         toggleButton.BackgroundColor3 = defaultTheme.TextColor
         toggleButton.Parent = toggleContainer
@@ -307,7 +332,7 @@ function UILib:CreateWindow(title)
         fillCorner.CornerRadius = UDim.new(1, 0)
         
         local thumb = Instance.new("Frame")
-        thumb.Size = UDim2.new(0, 15, 0, 15)
+        thumb.Size = adaptiveScale(15)
         thumb.BackgroundColor3 = Color3.new(1,1,1)
         thumb.Position = UDim2.new(0, 0, 0.5, -7)
         thumb.Parent = track
@@ -320,7 +345,7 @@ function UILib:CreateWindow(title)
             current = math.clamp(value, min, max)
             local percent = (current - min) / (max - min)
             fill.Size = UDim2.new(percent, 0, 1, 0)
-            thumb.Position = UDim2.new(percent, -7, 0.5, -7)
+            thumb.Position = UDim2.new(percent, -thumb.AbsoluteSize.X/2, 0.5, -thumb.AbsoluteSize.Y/2)
             valueLabel.Text = string.format("%.1f", current)
             if callback then callback(current) end
         end
@@ -330,6 +355,16 @@ function UILib:CreateWindow(title)
         thumb.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
                 dragging = true
+            end
+        end)
+        
+        track.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+                local pos = track.AbsolutePosition
+                local size = track.AbsoluteSize
+                local relative = (input.Position.X - pos.X) / size.X
+                updateSlider(min + (max - min) * relative)
             end
         end)
         
@@ -450,6 +485,28 @@ function UILib:CreateWindow(title)
         return dropdown
     end
     
+    function window:AddLabel(text)
+        local labelFrame = Instance.new("Frame")
+        labelFrame.Name = "Label_" .. text
+        labelFrame.BackgroundTransparency = 1
+        labelFrame.Size = UDim2.new(1, 0, 0, 20)
+        labelFrame.LayoutOrder = #self.Elements + 1
+        labelFrame.Parent = content
+        
+        local label = Instance.new("TextLabel")
+        label.Text = text
+        label.Font = Enum.Font.Gotham
+        label.TextColor3 = defaultTheme.TextColor
+        label.TextSize = 14
+        label.BackgroundTransparency = 1
+        label.Size = UDim2.new(1, 0, 1, 0)
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = labelFrame
+        
+        table.insert(self.Elements, labelFrame)
+        return label
+    end
+    
     function window:SetVisible(state)
         screenGui.Enabled = state
         window.Visible = state
@@ -458,6 +515,34 @@ function UILib:CreateWindow(title)
     function window:Destroy()
         screenGui:Destroy()
     end
+    
+    -- Адаптация при изменении размера экрана
+    local connection
+    connection = RunService.RenderStepped:Connect(function()
+        if not screenGui:IsDescendantOf(game) then
+            connection:Disconnect()
+            return
+        end
+        
+        -- Обновляем размеры адаптивных элементов
+        for _, element in ipairs(window.Elements) do
+            if element.Name:find("Toggle_") then
+                local container = element:FindFirstChildOfClass("Frame")
+                if container then
+                    container.Size = adaptiveScale(50)
+                    local toggleButton = container:FindFirstChildOfClass("Frame")
+                    if toggleButton then
+                        toggleButton.Size = adaptiveScale(21)
+                    end
+                end
+            elseif element.Name:find("Slider_") then
+                local thumb = element:FindFirstChild("Thumb", true)
+                if thumb then
+                    thumb.Size = adaptiveScale(15)
+                end
+            end
+        end
+    end)
     
     return window
 end
