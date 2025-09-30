@@ -1,4 +1,4 @@
-
+task.wait(4)
 
 -- Memuat library WindUI dengan penanganan kesalahan
 local WindUI
@@ -55,7 +55,7 @@ local Window = WindUI:CreateWindow({
     KeySystem = { 
         Key = { "1234", "Neeew", "QilinHub2024", "StealBrainrot" },
         Note = "Join our Discord for keys!",
-        URL = "https://discord.gg/nRtXqrA8cs",
+        URL = "https://go.linkify.ru/2CFq",
         SaveKey = true, -- automatically save and load the key
     }
 })
